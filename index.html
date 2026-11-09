@@ -113,6 +113,12 @@ a{color:var(--moss)}
 .seg.race .thumb{background:var(--saffron)}
 .seg button{all:unset;position:relative;z-index:1;box-sizing:border-box;flex:1 0 auto;text-align:center;padding:8px 14px;border-radius:999px;font:600 14px var(--body);color:var(--ink);cursor:pointer;white-space:nowrap;transition:color .3s}
 .seg button[aria-pressed="true"]{color:var(--surface)}
+.seg.spy .thumb{background:var(--moss-soft);box-shadow:inset 0 0 0 1.5px var(--moss)}
+.seg.spy.race .thumb{background:var(--saffron-soft);box-shadow:inset 0 0 0 1.5px var(--saffron)}
+.seg.spy button.spy-on{color:var(--moss)}
+.seg.spy.race button.spy-on{color:var(--saffron)}
+.seg.spy button[aria-pressed="true"]{color:var(--moss)}
+.seg.spy button[aria-pressed="true"]::after{content:"";position:absolute;left:50%;bottom:3px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--moss)}
 .seg button:focus-visible{outline:2px solid var(--moss);outline-offset:1px}
 
 .itin{background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden}
@@ -388,17 +394,40 @@ footer{font-size:12.5px;color:var(--muted);text-align:center}
     else if(n>=z) r.classList.add("past");
   });
 
-  /* Filter */
-  var seg=document.getElementById("seg"), thumb=document.getElementById("thumb");
+  /* Filter + scroll-follow */
+  var seg=document.getElementById("seg"), thumb=document.getElementById("thumb"), bar=document.querySelector(".filter");
   var btns=[].slice.call(seg.querySelectorAll("button"));
-  function moveThumb(b){thumb.style.width=b.offsetWidth+"px";thumb.style.transform="translateX("+b.offsetLeft+"px)"}
+  var dayrows=rows.filter(function(r){return r.classList.contains("dayrow")});
+  var mode="semua", spyOn=null;
+  function btnFor(f){return btns.filter(function(b){return b.dataset.f===f})[0]}
+  function moveThumb(b){
+    thumb.style.width=b.offsetWidth+"px";thumb.style.transform="translateX("+b.offsetLeft+"px)";
+    var l=b.offsetLeft-12, r=b.offsetLeft+b.offsetWidth+12;
+    if(l<seg.scrollLeft||r>seg.scrollLeft+seg.clientWidth){
+      var x=b.offsetLeft-(seg.clientWidth-b.offsetWidth)/2;
+      try{seg.scrollTo({left:x,behavior:"smooth"})}catch(e){seg.scrollLeft=x}
+    }
+  }
+  function paint(){
+    var f = mode==="semua" ? (spyOn||"semua") : mode;
+    var b=btnFor(f);
+    btns.forEach(function(x){x.classList.toggle("spy-on", mode==="semua" && x===b && f!=="semua")});
+    seg.classList.toggle("spy", mode==="semua" && f!=="semua");
+    seg.classList.toggle("race", f==="minggu");
+    moveThumb(b);
+  }
+  function spy(){
+    if(mode!=="semua") return;
+    var line=bar.getBoundingClientRect().bottom+12, found=null;
+    dayrows.forEach(function(r){ if(r.getBoundingClientRect().top<=line) found=r.dataset.day });
+    var se=document.scrollingElement||document.documentElement;
+    if(found && se.scrollTop+window.innerHeight>=se.scrollHeight-4){ var lastVis=dayrows.filter(function(r){return r.getBoundingClientRect().top<window.innerHeight})[dayrows.filter(function(r){return r.getBoundingClientRect().top<window.innerHeight}).length-1]; if(lastVis) found=lastVis.dataset.day }
+    if(found!==spyOn){spyOn=found;paint()}
+  }
   function show(f,animate){
-    if(!btns.some(function(b){return b.dataset.f===f})) f="semua";
-    var cur;
-    btns.forEach(function(b){var on=b.dataset.f===f;b.setAttribute("aria-pressed",on?"true":"false");if(on)cur=b});
-    seg.classList.toggle("race",f==="minggu");
-    moveThumb(cur);
-    try{cur.scrollIntoView({block:"nearest",inline:"nearest"})}catch(e){}
+    if(!btnFor(f)) f="semua";
+    mode=f; spyOn=null;
+    btns.forEach(function(b){b.setAttribute("aria-pressed",b.dataset.f===f?"true":"false")});
     var i=0;
     rows.forEach(function(r){
       var vis=f==="semua"||r.dataset.day===f;
@@ -406,16 +435,19 @@ footer{font-size:12.5px;color:var(--muted);text-align:center}
       r.classList.remove("in");
       if(vis&&animate){void r.offsetWidth;r.style.setProperty("--i",Math.min(i++,24));r.classList.add("in")}
     });
+    paint(); spy();
   }
   btns.forEach(function(b){b.addEventListener("click",function(){
     show(b.dataset.f,true);
     try{history.replaceState(null,"","#"+b.dataset.f)}catch(e){}
   })});
-  var start=(location.hash||"").slice(1);
-  if(!start){var tr=rows.filter(function(r){return r.dataset.date===today})[0];start=tr?tr.dataset.day:"semua"}
-  show(start,true);
-  window.addEventListener("resize",function(){var c=seg.querySelector('[aria-pressed="true"]');if(c)moveThumb(c)});
-  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){var c=seg.querySelector('[aria-pressed="true"]');if(c)moveThumb(c)});
+  var ticking=false;
+  window.addEventListener("scroll",function(){ if(!ticking){ticking=true;requestAnimationFrame(function(){ticking=false;spy()})} },{passive:true});
+  var startF=(location.hash||"").slice(1);
+  if(!startF){var tr=rows.filter(function(r){return r.dataset.date===today})[0];startF=tr?tr.dataset.day:"semua"}
+  show(startF,true);
+  window.addEventListener("resize",paint);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(paint);
   window.addEventListener("hashchange",function(){show((location.hash||"").slice(1),true)});
 })();
 </script>
